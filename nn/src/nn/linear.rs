@@ -1,4 +1,4 @@
-﻿use super::{Context, NNError, NuralNetwork, Tensor, macros::destruct};
+﻿use super::{Context, NNError, NuralNetwork, Tensor};
 use crate::Dim;
 use digit_layout::DigitLayout;
 
@@ -15,17 +15,6 @@ impl<T> NuralNetwork<T> for Linear<T> {
         inputs: impl IntoIterator<Item = Tensor<T>>,
         mut ctx: Context<T>,
     ) -> Result<(Context<T>, Vec<Tensor<T>>), NNError> {
-        // destruct!([x] = inputs);
-        println!("Linear : {}", ctx.path());
-        let mut inputs = inputs.into_iter();
-        let x = inputs.next().unwrap();
-        match inputs.next() {
-            Some(residual) => {
-                // ..
-            }
-            None => {}
-        }
-
         let Self {
             dt,
             shape,
@@ -35,15 +24,29 @@ impl<T> NuralNetwork<T> for Linear<T> {
         let [r, c] = shape;
         let w = ctx.weight("weight", dt, [r, c.clone()], weight);
 
-        let outputs = match bias {
-            Some((dt, bias)) => {
-                let b = ctx.weight("bias", dt, [c], bias);
-                ctx.call("", "linear", None, [x, w, b])
-            }
-            None => {
-                // format
-                ctx.call("", "linear", None, [x, w])
-            }
+        let mut inputs = inputs.into_iter();
+        let x = inputs.next().unwrap();
+        let outputs = match inputs.next() {
+            Some(residual) => match bias {
+                Some((dt, bias)) => {
+                    let b = ctx.weight("bias", dt, [c], bias);
+                    ctx.call("", "linear", Some(true.into()), [x, residual, w, b])
+                }
+                None => {
+                    // format
+                    ctx.call("", "linear", Some(true.into()), [x, residual, w])
+                }
+            },
+            None => match bias {
+                Some((dt, bias)) => {
+                    let b = ctx.weight("bias", dt, [c], bias);
+                    ctx.call("", "linear", Some(false.into()), [x, w, b])
+                }
+                None => {
+                    // format
+                    ctx.call("", "linear", Some(false.into()), [x, w])
+                }
+            },
         };
 
         Ok((ctx, outputs?))

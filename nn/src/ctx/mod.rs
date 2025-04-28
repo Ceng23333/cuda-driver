@@ -16,14 +16,19 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
-    pub fn register_op(&mut self, name: impl Into<String>, op: impl Operator + 'static) {
+    pub fn register_op(
+        &mut self,
+        name: impl Into<String>,
+        op: impl Operator + 'static,
+    ) -> &mut Self {
         assert!(
             self.op_lib
                 .0
                 .borrow_mut()
                 .insert(name.into(), Rc::new(op))
                 .is_none()
-        )
+        );
+        self
     }
 }
 

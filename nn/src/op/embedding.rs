@@ -17,12 +17,11 @@ impl Operator for Embedding {
             [wte, tokens, wpe, pos] => {
                 dims!([_, d] = wte);
                 dims!([n] = tokens);
-                dims!([_, d_] = wpe);
-                dims!([n_] = pos);
+                dims!([_, _d] = wpe);
+                dims!([_n] = pos);
 
-                // TODO 需要判断相等
-                // assert_eq!(d, d_);
-                // assert_eq!(n, n_);
+                // TODO 判断正确性
+
                 Ok(vec![TensorMeta::new(wte.dt, [n.clone(), d.clone()])])
             }
             _ => Err(OpError::ShapeError),

@@ -11,20 +11,14 @@ impl Operator for Rope {
 
         match inputs {
             [x, pos, sin, cos] => {
-                dims!([n, d] = x);
+                dims!([_n, _d] = x);
+                dims!([_n] = pos);
+                dims!([_nctx, _dh_2] = sin);
+                dims!([_nctx, _dh_2] = cos);
 
-                // dims!([s_] = pos);
-                // dims!([nctx, hd_half] = sin);
-                // dims!([nctx_, hd_half_] = cos);
+                // TODO 判断正确性
 
-                // TODO 需要判断相等
-                // assert_eq!(s, s_);
-                // assert_eq!(hd / 2, hd_half);
-                // assert_eq!(nctx, nctx_);
-                // assert_eq!(hd_half, hd_half_);
-
-                // 输出形状与输入相同
-                Ok(vec![TensorMeta::new(x.dt, [n.clone(), d.clone()])])
+                Ok(vec![x.clone()])
             }
             _ => Err(OpError::ShapeError),
         }

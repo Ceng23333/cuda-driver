@@ -25,6 +25,9 @@ pub struct TopoNode {
 }
 
 impl GraphTopo {
+    /// # Safety
+    ///
+    /// 调用者来保证图结构的正确性
     pub const unsafe fn from_raw_parts(
         n_inputs: usize,
         n_outputs: usize,

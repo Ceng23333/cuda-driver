@@ -5,23 +5,19 @@ pub struct Attention;
 
 impl Operator for Attention {
     fn infer(&self, inputs: &[TensorMeta], args: Option<&Arg>) -> Result<Vec<TensorMeta>, OpError> {
-        let dh = if let Some(Arg::Dim(dh)) = args {
-            dh
-        } else {
+        let Some(Arg::Dim(_dh)) = args else {
             return Err(OpError::ArgError);
         };
 
         match inputs {
             [q, k, v] => {
-                dims!([n, dq] = q);
-                dims!([n_1, dk] = k);
-                dims!([n_2, dv] = v);
+                dims!([_n, _dq] = q);
+                dims!([_n, _dk] = k);
+                dims!([_n, _dv] = v);
 
-                // TODO 需要判断相等
-                // assert_eq!(dk, dv);
-                // assert_eq!(n, n_1, n_2);
+                // TODO 判断正确性
 
-                Ok(vec![TensorMeta::new(q.dt, [n.clone(), dh.clone()])])
+                Ok(vec![q.clone()])
             }
             _ => Err(OpError::ShapeError),
         }

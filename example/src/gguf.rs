@@ -1,10 +1,11 @@
 ﻿use crate::blob::Data;
 use ggus::{
     GENERAL_ALIGNMENT, GGuf, GGufError, GGufFileName, GGufMetaDataValueType, GGufMetaKV,
-    GGufMetaMap, ggml_quants::digit_layout::DigitLayout,
+    GGufMetaMap,
 };
 use memmap2::Mmap;
 use std::{collections::HashMap, fmt::Debug, fs::File, path::Path, thread};
+use tensor::Tensor;
 
 /// 从指定文件的路径出发，映射所有分片文件。
 pub fn map_files(path: impl AsRef<Path>) -> Box<[Mmap]> {
@@ -41,14 +42,7 @@ pub struct GGufModel<'a> {
     /// 元数据键值对。
     pub meta_kvs: HashMap<&'a str, GGufMetaKV<'a>>,
     /// 张量。
-    pub tensors: HashMap<&'a str, GGufTensor<'a>>,
-}
-
-/// GGuf 张量。
-pub struct GGufTensor<'a> {
-    pub ty: DigitLayout,
-    pub shape: Box<[usize]>,
-    pub data: Data<'a>,
+    pub tensors: HashMap<&'a str, Tensor<Data<'a>, 3>>,
 }
 
 impl<'a> GGufModel<'a> {
@@ -92,11 +86,17 @@ impl<'a> GGufModel<'a> {
                 Occupied(_) => return Err(GGufError::DuplicateTensorName(name.into())),
                 Vacant(vacant) => {
                     let t = t.to_info();
-                    vacant.insert(GGufTensor {
-                        ty: t.ty().to_digit_layout(),
-                        shape: t.shape().iter().rev().map(|&x| x as usize).collect(),
-                        data: gguf.data[t.offset()..][..t.nbytes()].into(),
-                    });
+                    let ty = t.ty().to_digit_layout();
+                    let shape = t
+                        .shape()
+                        .iter()
+                        .rev()
+                        .map(|&x| x as usize)
+                        .collect::<Vec<_>>();
+                    vacant.insert(Tensor::from_dim_slice(ty, &*shape).map(|len| {
+                        assert_eq!(len, t.nbytes());
+                        gguf.data[t.offset()..][..t.nbytes()].into()
+                    }));
                 }
             }
         }

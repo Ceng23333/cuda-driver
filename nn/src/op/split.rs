@@ -1,37 +1,29 @@
 use super::{OpError, Operator, macros::*};
 use crate::{Arg, Dim, TensorMeta};
-use std::collections::HashMap;
 
 pub struct Split;
 
 impl Operator for Split {
     fn infer(&self, inputs: &[TensorMeta], args: Option<&Arg>) -> Result<Vec<TensorMeta>, OpError> {
-        let (axis, parts) = if let Arg::Dict(args) = args.ok_or(OpError::ArgError)? {
-            let axis = args.get("axis").ok_or(OpError::ArgError)?;
-            let parts = args.get("parts").ok_or(OpError::ArgError)?;
-            let axis = if let Arg::Dim(Dim::Constant(axis)) = axis {
-                axis
-            } else {
-                return Err(OpError::ArgError);
-            };
-            let parts = if let Arg::Arr(parts) = parts {
-                parts
-                    .iter()
-                    .map(|p| {
-                        if let Arg::Dim(dim) = p {
-                            Ok(dim.clone())
-                        } else {
-                            Err(OpError::ArgError)
-                        }
-                    })
-                    .collect::<Result<Vec<_>, _>>()?
-            } else {
-                return Err(OpError::ArgError);
-            };
-            (axis, parts)
-        } else {
+        let Some(Arg::Dict(args)) = args else {
             return Err(OpError::ArgError);
         };
+        let Some(Arg::Dim(Dim::Constant(axis))) = args.get("axis") else {
+            return Err(OpError::ArgError);
+        };
+        let Some(Arg::Arr(parts)) = args.get("parts") else {
+            return Err(OpError::ArgError);
+        };
+        let parts = parts
+            .iter()
+            .map(|p| {
+                if let Arg::Dim(dim) = p {
+                    Ok(dim.clone())
+                } else {
+                    Err(OpError::ArgError)
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         destruct!([x] = inputs);
 

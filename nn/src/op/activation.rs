@@ -2,7 +2,6 @@ use super::{OpError, Operator, macros::*};
 use crate::{Arg, TensorMeta};
 
 pub struct SwiGLU;
-pub struct GeLU;
 
 impl Operator for SwiGLU {
     fn infer(&self, inputs: &[TensorMeta], args: Option<&Arg>) -> Result<Vec<TensorMeta>, OpError> {
@@ -11,14 +10,16 @@ impl Operator for SwiGLU {
         }
 
         destruct!([gate, up] = inputs);
-        dims!([n, d] = gate);
-        dims!([n_, d_] = up);
+        dims!([_n, _d] = gate);
+        dims!([_n, _d] = up);
 
-        // TODO 需要判断相等
+        // TODO 判断正确性
 
-        Ok(vec![TensorMeta::new(up.dt, [n.clone(), d.clone()])])
+        Ok(vec![gate.clone()])
     }
 }
+
+pub struct GeLU;
 
 impl Operator for GeLU {
     fn infer(&self, inputs: &[TensorMeta], args: Option<&Arg>) -> Result<Vec<TensorMeta>, OpError> {
@@ -27,8 +28,8 @@ impl Operator for GeLU {
         }
 
         destruct!([x] = inputs);
-        dims!([n, d] = x);
+        dims!([_n, _d] = x);
 
-        Ok(vec![TensorMeta::new(x.dt, [n.clone(), d.clone()])])
+        Ok(vec![x.clone()])
     }
 }

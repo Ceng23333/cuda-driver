@@ -4,10 +4,17 @@ use std::collections::HashMap;
 /// 神经网络标量参数
 #[derive(Clone)]
 pub enum Arg {
+    Bool(bool),
     Dim(Dim),
     Float(f64),
     Arr(Box<[Arg]>),
     Dict(HashMap<String, Arg>),
+}
+
+impl From<bool> for Arg {
+    fn from(value: bool) -> Self {
+        Self::Bool(value)
+    }
 }
 
 impl From<Dim> for Arg {

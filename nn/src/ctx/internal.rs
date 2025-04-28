@@ -1,7 +1,7 @@
 ﻿use super::{Edge, GraphBuilder, Node, OpLib, Tensor, TensorMeta, WeightInfo};
 use crate::{Arg, Dim, Graph, GraphTopo, OpError, TopoNode};
 use digit_layout::DigitLayout;
-use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc, usize};
+use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
 
 pub(super) struct GraphContext<T>(Rc<RefCell<Internal<T>>>);
 
@@ -64,7 +64,7 @@ impl<T> Internal<T> {
         let mut connections =
             Vec::with_capacity(n_outputs + op_nodes.iter().map(|n| n.inputs.len()).sum::<usize>());
 
-        let mut edge_map = vec![usize::MAX; edges.len()];
+        let mut edge_map = vec![usize::MAX; tensors.len()];
 
         // 填入全图输入
         for i in 0..n_inputs {

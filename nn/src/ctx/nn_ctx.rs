@@ -7,7 +7,7 @@ use std::{
 };
 
 impl GraphBuilder {
-    pub fn launch<T, NN: NuralNetwork<T>>(
+    pub fn build<T, NN: NuralNetwork<T>>(
         &self,
         nn: NN,
         inputs: impl IntoIterator<Item = TensorMeta>,

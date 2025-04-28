@@ -53,10 +53,10 @@ impl Dim {
         }
     }
 
-    pub fn substitute(self, value: &HashMap<&str, usize>) -> usize {
+    pub fn substitute(&self, value: &HashMap<&str, usize>) -> usize {
         match self {
-            Self::Constant(value) => value,
-            Self::Variable(name) => *value.get(&*name).unwrap(),
+            &Self::Constant(value) => value,
+            Self::Variable(name) => *value.get(&**name).unwrap(),
             Self::Sum(operands) => operands.into_iter().fold(0, |acc, Operand { ty, dim }| {
                 let value = dim.substitute(value);
                 match ty {
