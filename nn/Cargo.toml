@@ -6,3 +6,4 @@ edition.workspace = true
 [dependencies]
 graph.path = "../graph"
 digit-layout = "0.3"
+itertools = "0.14"

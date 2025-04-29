@@ -1,11 +1,13 @@
 ﻿use super::{Context, Linear, NNError, NuralNetwork, Tensor, macros::*};
 use crate::{Arg, Dim};
+use itertools::izip;
 
 pub struct Attention<T> {
     pub nh: Dim,
     pub nkvh: Dim,
     pub qkv: Linear<T>,
     pub rope: Option<RoPE<T>>,
+    pub sessions: Box<[Session<T>]>,
     pub output: Linear<T>,
 }
 
@@ -13,6 +15,16 @@ pub struct RoPE<T> {
     pub nctx: Dim,
     pub sin: T,
     pub cos: T,
+}
+
+pub struct Session<T> {
+    pub seq: Dim,
+    pub cache: Option<Cache<T>>,
+}
+
+pub struct Cache<T> {
+    pub pos: Dim,
+    pub items: [T; 2],
 }
 
 impl<T> NuralNetwork<T> for Attention<T> {
@@ -28,6 +40,7 @@ impl<T> NuralNetwork<T> for Attention<T> {
             nkvh,
             qkv,
             rope,
+            sessions,
             output,
         } = self;
         let residual = x.clone();
@@ -45,7 +58,7 @@ impl<T> NuralNetwork<T> for Attention<T> {
                     ("axis".into(), Arg::int(1)),
                     (
                         "parts".into(),
-                        Arg::arr([nh, nkvh.clone(), nkvh].map(Arg::from))
+                        Arg::arr([nh, nkvh.clone(), nkvh.clone()].map(Arg::from))
                     )
                 ])),
                 [x],
@@ -71,7 +84,49 @@ impl<T> NuralNetwork<T> for Attention<T> {
             None => [q, k],
         };
 
-        destruct!([o] = ctx.call("", "attention", Some(dh.into()), [q, k, v])?);
+        let session_split = Some(Arg::dict([
+            ("axis".into(), Arg::int(0)),
+            (
+                "parts".into(),
+                Arg::arr(sessions.iter().map(|s| Arg::Dim(s.seq.clone()))),
+            ),
+        ]));
+
+        let q = ctx.call("", "split", session_split.clone(), [q])?;
+        let k = ctx.call("", "split", session_split.clone(), [k])?;
+        let v = ctx.call("", "split", session_split, [v])?;
+        let o = izip!(q, k, v, sessions)
+            .enumerate()
+            .map(|(i, (q, k, v, s))| -> Result<Tensor<T>, NNError> {
+                match s.cache {
+                    Some(Cache { pos, items }) => {
+                        let name_in = format!("session[{i}].kv-cache-in");
+                        let [input, output] = items;
+                        let shape_in = [pos + s.seq, nkvh.clone() * dh.clone()];
+                        let cache = ctx.load_external(name_in, q.dt(), shape_in, input);
+                        destruct!(
+                            [o, cache] = ctx.call(
+                                "",
+                                "attention",
+                                Some(dh.clone().into()),
+                                [q, k, v, cache]
+                            )?
+                        );
+                        let name_out = format!("session[{i}].kv-cache-out");
+                        ctx.save_external(name_out, cache, output);
+                        Ok(o)
+                    }
+                    None => {
+                        destruct!(
+                            [o] = ctx.call("", "attention", Some(dh.clone().into()), [q, k, v])?
+                        );
+                        Ok(o)
+                    }
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        destruct!([o] = ctx.call("", "concat", Some(Arg::int(0)), o)?);
 
         let outputs = ctx.trap("attn-output", output, [o, residual]);
 

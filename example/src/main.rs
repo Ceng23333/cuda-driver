@@ -2,12 +2,12 @@ mod blob;
 mod gguf;
 mod loader;
 
-use ::nn::{Dim, Edge, GraphBuilder, TensorMeta, External, op};
 use blob::{Blob, Data};
 use cuda::Device;
 use gguf::{GGufModel, map_files};
 use ggus::{GGufMetaMapExt, ggml_quants::digit_layout::types};
 use loader::{MemCalculator, WeightLoader};
+use nn::{Dim, Edge, External, GraphBuilder, Session, TensorMeta, op};
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
@@ -70,6 +70,11 @@ fn main() {
                         sin: "sin_table".into(),
                         cos: "cos_table".into(),
                     }),
+                    sessions: [Session {
+                        seq: Dim::var("n"),
+                        cache: None,
+                    }]
+                    .into(),
                     output: ::nn::Linear {
                         dt: types::F32,
                         shape: [d.into(), (nh * dh).into()],

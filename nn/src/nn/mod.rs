@@ -10,7 +10,7 @@ mod transformer_blk;
 use crate::{OpError, Tensor, ctx::Context};
 
 pub use activation::Activation;
-pub use attention::{Attention, RoPE};
+pub use attention::{Attention, Cache, RoPE, Session};
 pub use embedding::{Embedding, Table};
 pub use linear::Linear;
 pub use llama::LLaMA;
