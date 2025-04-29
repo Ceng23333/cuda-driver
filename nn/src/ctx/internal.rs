@@ -1,4 +1,4 @@
-﻿use super::{Edge, GraphBuilder, Node, OpLib, Tensor, TensorMeta, WeightInfo};
+﻿use super::{Edge, External, GraphBuilder, Node, OpLib, Tensor, TensorMeta};
 use crate::{Arg, Dim, Graph, GraphTopo, OpError, TopoNode};
 use digit_layout::DigitLayout;
 use std::{cell::RefCell, collections::HashMap, ops::Range, rc::Rc};
@@ -10,14 +10,19 @@ impl GraphBuilder {
         &self,
         global_inputs: impl IntoIterator<Item = TensorMeta>,
     ) -> (GraphContext<T>, Vec<Tensor<T>>) {
-        let tensors = global_inputs.into_iter().collect::<Vec<_>>();
+        let tensors = global_inputs
+            .into_iter()
+            .map(|meta| Edge {
+                meta,
+                external: None,
+            })
+            .collect::<Vec<_>>();
         let n_inputs = tensors.len();
         let rc = Rc::new(RefCell::new(Internal {
             op_lib: self.op_lib.clone(),
-            n_inputs,
-            tensors,
             op_nodes: Default::default(),
-            weights: Default::default(),
+            tensors,
+            n_inputs,
         }));
 
         let tensors = (0..n_inputs)
@@ -34,21 +39,19 @@ impl GraphBuilder {
 pub(super) struct Internal<T> {
     op_lib: Rc<OpLib>,
     op_nodes: Vec<Node_>,
-    tensors: Vec<TensorMeta>,
-    weights: HashMap<usize, WeightInfo<T>>,
+    tensors: Vec<Edge<T>>,
     n_inputs: usize,
 }
 
 impl<T> Internal<T> {
     pub fn tensor(&self, idx: usize) -> TensorMeta {
-        self.tensors[idx].clone()
+        self.tensors[idx].meta.clone()
     }
 
     pub fn into_graph(self, global_outputs: Vec<Tensor<T>>) -> Graph<Node, Edge<T>> {
         let Self {
-            tensors,
-            mut weights,
             op_nodes,
+            tensors,
             n_inputs,
             ..
         } = self;
@@ -65,14 +68,12 @@ impl<T> Internal<T> {
             Vec::with_capacity(n_outputs + op_nodes.iter().map(|n| n.inputs.len()).sum::<usize>());
 
         let mut edge_map = vec![usize::MAX; tensors.len()];
+        let mut tensors = tensors.into_iter().enumerate().collect::<HashMap<_, _>>();
 
         // 填入全图输入
         for i in 0..n_inputs {
             edge_map[i] = i;
-            edges.push(Edge {
-                meta: tensors[i].clone(),
-                weight_info: None,
-            });
+            edges.push(tensors.remove(&i).unwrap());
         }
         // 预留全图输出的空间
         connections.extend(std::iter::repeat_n(usize::MAX, n_outputs));
@@ -95,10 +96,7 @@ impl<T> Internal<T> {
                     let j = edges.len();
                     edge_map[i] = j;
                     n_local += 1;
-                    edges.push(Edge {
-                        meta: tensors[i].clone(),
-                        weight_info: weights.remove(&i),
-                    });
+                    edges.push(tensors.remove(&i).unwrap());
                     j
                 }
                 j => j,
@@ -107,10 +105,7 @@ impl<T> Internal<T> {
             for i in outputs {
                 assert_eq!(edge_map[i], usize::MAX);
                 edge_map[i] = edges.len();
-                edges.push(Edge {
-                    meta: tensors[i].clone(),
-                    weight_info: None,
-                });
+                edges.push(tensors.remove(&i).unwrap());
             }
             // 记录节点拓扑
             topo_nodes.push(TopoNode {
@@ -140,7 +135,6 @@ impl<T> Internal<T> {
     }
 }
 
-#[allow(unused)]
 struct Node_ {
     name: String,
     op: String,
@@ -158,11 +152,10 @@ impl<T> GraphContext<T> {
             n_inputs: internal.n_inputs,
             op_nodes: std::mem::take(&mut internal.op_nodes),
             tensors: std::mem::take(&mut internal.tensors),
-            weights: std::mem::take(&mut internal.weights),
         }
     }
 
-    pub fn weight(
+    pub fn load_external(
         &self,
         name: String,
         dt: DigitLayout,
@@ -172,14 +165,22 @@ impl<T> GraphContext<T> {
         let mut internal = self.0.borrow_mut();
 
         let idx = internal.tensors.len();
-        internal.tensors.push(TensorMeta::new(dt, shape));
-        assert!(
-            internal
-                .weights
-                .insert(idx, WeightInfo { name, item })
-                .is_none()
-        );
+        internal.tensors.push(Edge {
+            meta: TensorMeta::new(dt, shape),
+            external: Some(External { name, item }),
+        });
         self.tensor(idx)
+    }
+
+    pub fn save_external(&self, name: String, tensor: Tensor<T>, item: T) {
+        let mut internal = self.0.borrow_mut();
+
+        assert!(
+            internal.tensors[tensor.idx]
+                .external
+                .replace(External { name, item })
+                .is_none()
+        )
     }
 
     pub fn call<'ctx>(
@@ -205,9 +206,16 @@ impl<T> GraphContext<T> {
             .map(|&i| internal.tensor(i))
             .collect::<Vec<_>>();
 
-        let outputs = infer.infer(&input_meta, arg.as_ref())?;
         let start = internal.tensors.len();
-        internal.tensors.extend(outputs);
+        internal.tensors.extend(
+            infer
+                .infer(&input_meta, arg.as_ref())?
+                .into_iter()
+                .map(|meta| Edge {
+                    meta,
+                    external: None,
+                }),
+        );
         let end = internal.tensors.len();
 
         internal.op_nodes.push(Node_ {

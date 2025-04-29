@@ -32,7 +32,7 @@ impl<T> NuralNetwork<T> for Normalization<T> {
         let Self { d, epsilon, items } = self;
         let outputs = match items {
             Type::RmsNorm { dt, scale } => {
-                let scale = ctx.weight("scale", dt, [d], scale);
+                let scale = ctx.load_external("scale", dt, [d], scale);
                 ctx.call("", "rms-norm", Some(epsilon.into()), [x, scale])
             }
             Type::LayerNorm {
@@ -41,8 +41,8 @@ impl<T> NuralNetwork<T> for Normalization<T> {
                 dt_bias,
                 bias,
             } => {
-                let scale = ctx.weight("scale", dt_scale, [d.clone()], scale);
-                let bias = ctx.weight("bias", dt_bias, [d], bias);
+                let scale = ctx.load_external("scale", dt_scale, [d.clone()], scale);
+                let bias = ctx.load_external("bias", dt_bias, [d], bias);
                 ctx.call("", "layer-norm", Some(epsilon.into()), [x, scale, bias])
             }
         };

@@ -21,7 +21,7 @@ impl GraphBuilder {
 pub struct Context<'g, T> {
     path: String,
     graph: &'g GraphContext<T>,
-    weights: HashSet<String>,
+    tensor_name: HashSet<String>,
     sub: NameDecorator,
     ops: NameDecorator,
 }
@@ -44,7 +44,7 @@ impl<T> Context<'_, T> {
         trap::<T, NN>(format!("{path}.{name}"), graph, nn, inputs)
     }
 
-    pub fn weight(
+    pub fn load_external(
         &mut self,
         name: impl Display,
         dt: DigitLayout,
@@ -54,11 +54,22 @@ impl<T> Context<'_, T> {
         let Self {
             path,
             graph,
-            weights,
+            tensor_name,
             ..
         } = self;
-        assert!(weights.insert(name.to_string()));
-        graph.weight(format!("{path}.{name}"), dt, shape, item)
+        assert!(tensor_name.insert(name.to_string()));
+        graph.load_external(format!("{path}.{name}"), dt, shape, item)
+    }
+
+    pub fn save_external(&mut self, name: impl Display, tensor: Tensor<T>, item: T) {
+        let Self {
+            path,
+            graph,
+            tensor_name,
+            ..
+        } = self;
+        assert!(tensor_name.insert(name.to_string()));
+        graph.save_external(format!("{path}.{name}"), tensor, item)
     }
 
     pub fn call(
@@ -100,7 +111,7 @@ fn trap<T, NN: NuralNetwork<T>>(
         Context {
             path,
             graph: context,
-            weights: Default::default(),
+            tensor_name: Default::default(),
             sub: Default::default(),
             ops: Default::default(),
         },

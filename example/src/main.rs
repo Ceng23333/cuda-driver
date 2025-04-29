@@ -2,7 +2,7 @@ mod blob;
 mod gguf;
 mod loader;
 
-use ::nn::{Dim, Edge, GraphBuilder, TensorMeta, WeightInfo, op};
+use ::nn::{Dim, Edge, GraphBuilder, TensorMeta, External, op};
 use blob::{Blob, Data};
 use cuda::Device;
 use gguf::{GGufModel, map_files};
@@ -261,7 +261,10 @@ pub enum TensorData<'a> {
 fn fix_n<'a>(edge: Edge<String>, gguf: &'a GGufModel, n: usize) -> Tensor<TensorData<'a>, 3> {
     let value = HashMap::from([("n", n)]);
 
-    let Edge { meta, weight_info } = edge;
+    let Edge {
+        meta,
+        external: weight_info,
+    } = edge;
     let TensorMeta { dt, shape } = meta;
     let shape = shape
         .iter()
@@ -269,7 +272,7 @@ fn fix_n<'a>(edge: Edge<String>, gguf: &'a GGufModel, n: usize) -> Tensor<Tensor
         .collect::<Vec<_>>();
 
     match weight_info {
-        Some(WeightInfo { name, item }) => {
+        Some(External { name, item }) => {
             let tensor = &gguf.tensors[&*item];
             assert_eq!(tensor.dt(), dt, "dt mismatch: {name}");
             assert_eq!(tensor.shape(), &shape, "shape mismatch: {name}");

@@ -24,13 +24,13 @@ impl<T> NuralNetwork<T> for Embedding<T> {
         let mut inputs = inputs.into_iter();
 
         let Table { row, weight } = wte;
-        let wte = ctx.weight("wte", dt, [row, d.clone()], weight);
+        let wte = ctx.load_external("wte", dt, [row, d.clone()], weight);
         let tokens = inputs.next().unwrap();
 
         let outputs = match wpe {
             Some(wpe) => {
                 let Table { row, weight } = wpe;
-                let wpe = ctx.weight("wpe", dt, [row, d], weight);
+                let wpe = ctx.load_external("wpe", dt, [row, d], weight);
                 let pos = inputs.next().unwrap();
                 ctx.call("", "embedding", None, [wte, tokens, wpe, pos])
             }

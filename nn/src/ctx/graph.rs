@@ -9,10 +9,10 @@ pub struct Node {
 
 pub struct Edge<T> {
     pub meta: TensorMeta,
-    pub weight_info: Option<WeightInfo<T>>,
+    pub external: Option<External<T>>,
 }
 
-pub struct WeightInfo<T> {
+pub struct External<T> {
     pub name: String,
     pub item: T,
 }

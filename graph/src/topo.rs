@@ -1,16 +1,10 @@
 ﻿use std::ops::Range;
 
-pub struct Graph<N, E> {
-    pub topo: GraphTopo,
-    pub nodes: Box<[N]>,
-    pub edges: Box<[E]>,
-}
-
 pub struct GraphTopo {
-    n_inputs: usize,
-    n_outputs: usize,
-    connections: Box<[usize]>,
-    nodes: Box<[TopoNode]>,
+    pub(crate) n_inputs: usize,
+    pub(crate) n_outputs: usize,
+    pub(crate) connections: Box<[usize]>,
+    pub(crate) nodes: Box<[TopoNode]>,
 }
 
 pub struct NodeRef<'a> {
