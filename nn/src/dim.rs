@@ -57,14 +57,14 @@ impl Dim {
         match self {
             &Self::Constant(value) => value,
             Self::Variable(name) => *value.get(&**name).unwrap(),
-            Self::Sum(operands) => operands.into_iter().fold(0, |acc, Operand { ty, dim }| {
+            Self::Sum(operands) => operands.iter().fold(0, |acc, Operand { ty, dim }| {
                 let value = dim.substitute(value);
                 match ty {
                     Type::Positive => acc + value,
                     Type::Negative => acc.checked_sub(value).unwrap(),
                 }
             }),
-            Self::Product(operands) => operands.into_iter().fold(1, |acc, Operand { ty, dim }| {
+            Self::Product(operands) => operands.iter().fold(1, |acc, Operand { ty, dim }| {
                 let value = dim.substitute(value);
                 match ty {
                     Type::Positive => acc * value,

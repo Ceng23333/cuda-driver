@@ -119,6 +119,7 @@ fn main() {
         .register_op("gelu", op::activation::GeLU)
         .register_op("linear", op::linear::Linear)
         .register_op("rope", op::rope::Rope)
+        .register_op("concat", op::concat::Concat)
         .build(
             llama,
             [
@@ -178,7 +179,7 @@ fn main() {
             if let TensorData::Weight(_, data) = edge.get() {
                 let range = weights[&data.as_ptr()].clone();
                 let dev = &mut weight_memory[range.clone()];
-                loader.load(dev, &data, &stream);
+                loader.load(dev, data, &stream);
                 // Tensor::<usize, 2>::from_dim_slice(edge.dt, edge.shape).map(|_| range)
             }
         }
@@ -246,7 +247,7 @@ fn insert_sin_cos(gguf: &mut GGufModel) {
             gguf.tensors
                 .insert(
                     name,
-                    Tensor::from_dim_slice(ty, &[nctx, dh / 2]).map(|len| {
+                    Tensor::from_dim_slice(ty, [nctx, dh / 2]).map(|len| {
                         assert_eq!(len, data.len());
                         data.into()
                     })

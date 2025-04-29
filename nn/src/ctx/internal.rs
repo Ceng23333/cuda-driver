@@ -71,18 +71,16 @@ impl<T> Internal<T> {
         let mut tensors = tensors.into_iter().enumerate().collect::<HashMap<_, _>>();
 
         // 填入全图输入
-        for i in 0..n_inputs {
-            edge_map[i] = i;
-            edges.push(tensors.remove(&i).unwrap());
+        for (i, map) in edge_map.iter_mut().enumerate().take(n_inputs) {
+            *map = i;
+            edges.push(tensors.remove(&i).unwrap())
         }
         // 预留全图输出的空间
         connections.extend(std::iter::repeat_n(usize::MAX, n_outputs));
         // 遍历节点
         for op in op_nodes {
             let Node_ {
-                name,
-                op,
-                arg,
+                node,
                 inputs,
                 outputs,
             } = op;
@@ -114,7 +112,7 @@ impl<T> Internal<T> {
                 n_outputs,
             });
             // 记录节点
-            nodes.push(Node { name, op, arg })
+            nodes.push(node)
         }
         // 回填全图输出
         for (i, j) in global_outputs.into_iter().enumerate() {
@@ -136,9 +134,7 @@ impl<T> Internal<T> {
 }
 
 struct Node_ {
-    name: String,
-    op: String,
-    arg: Option<Arg>,
+    node: Node,
     inputs: Box<[usize]>,
     outputs: Range<usize>,
 }
@@ -219,9 +215,11 @@ impl<T> GraphContext<T> {
         let end = internal.tensors.len();
 
         internal.op_nodes.push(Node_ {
-            name,
-            op: op.into(),
-            arg,
+            node: Node {
+                name,
+                op: op.into(),
+                arg,
+            },
             inputs,
             outputs: start..end,
         });

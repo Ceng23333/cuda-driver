@@ -2,6 +2,7 @@
 
 pub mod activation;
 pub mod attention;
+pub mod concat;
 pub mod embedding;
 pub mod linear;
 pub mod normalization;
