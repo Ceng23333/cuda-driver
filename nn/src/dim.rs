@@ -3,10 +3,11 @@
 //! 考虑到形状运算的实际情况，只支持多项式的运算。
 
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fmt::Display,
     ops::{Add, Div, Mul, Neg, Sub},
 };
+use num_rational::Ratio;
 
 /// 形状的一个维度，或参与维度运算的值。
 ///
@@ -76,9 +77,125 @@ impl Dim {
             }),
         }
     }
+
+    /// Convert the expression to sum of all canonical terms.
+    /// Each term is represented as (coefficient, variables) where variables are sorted.
+    /// Returns None if the expression is too complex to simplify.
+    fn to_canonical_terms(&self) -> Option<Vec<CanonicalTerm>> {
+        match self {
+            Self::Constant(value) => Some(vec![CanonicalTerm::new(*value as isize)]),
+            Self::Variable(name) => Some(vec![CanonicalTerm::with_var(1, name.clone())]),
+            Self::Sum(operands) => {
+                let mut terms = Vec::new();
+                for operand in operands {
+                    let sign = match operand.ty {
+                        Type::Positive => 1,
+                        Type::Negative => -1,
+                    };
+                    let sub_terms = operand.dim.to_canonical_terms()?;
+                    for term in sub_terms {
+                        let mut new_term = term;
+                        new_term.coef *= sign;
+                        terms.push(new_term);
+                    }
+                }
+                Some(Self::combine_like_terms(terms))
+            }
+            Self::Product(operands) => {
+                let mut result = vec![CanonicalTerm::new(1)];
+
+                for operand in operands {
+                    let sign = match operand.ty {
+                        Type::Positive => 1,
+                        Type::Negative => -1,
+                    };
+                    let sub_terms = operand.dim.to_canonical_terms()?;
+                    
+                    if sign == 1 {
+                        let mut new_result = Vec::new();
+                        for term1 in &result {
+                            for term2 in &sub_terms {
+                                let mut term = term1.multiply(term2);
+                                term.simplify();
+                                new_result.push(term);
+                            }
+                        }
+                        result = Self::combine_like_terms(new_result);
+                    } else {
+                        let mut new_result = Vec::new();
+                        for term1 in &result {
+                            for term2 in &sub_terms {
+                                let mut term = term1.divide(term2);
+                                term.simplify();
+                                new_result.push(term);
+                            }
+                        }
+                        result = Self::combine_like_terms(new_result);
+                    }
+                }
+                Some(result)
+            }
+        }
+    }
+
+    /// Checks if two Dim expressions are mathematically equivalent.
+    /// Returns:
+    /// - Some(true) if expressions are definitely equivalent
+    /// - Some(false) if expressions are definitely not equivalent
+    /// - None if equivalence cannot be determined without substitution
+    pub fn eq(&self, other: &Self) -> Option<bool> {
+        // Convert both expressions to canonical form and compare
+        let self_terms = self.to_canonical_terms()?;
+        let other_terms = other.to_canonical_terms()?;
+
+        // If terms match exactly, they are equivalent
+        if self_terms == other_terms {
+            Some(true)
+        } else {
+            Some(false)
+        }
+    }
+
+    /// Combine like terms by adding coefficients of terms with the same variables.
+    fn combine_like_terms(mut terms: Vec<CanonicalTerm>) -> Vec<CanonicalTerm> {
+        terms.sort_by(|a, b| {
+            let mut a_vars: Vec<_> = a.factors.iter().collect();
+            let mut b_vars: Vec<_> = b.factors.iter().collect();
+            a_vars.sort();
+            b_vars.sort();
+            a_vars.cmp(&b_vars)
+        });
+        
+        let mut result = Vec::new();
+        let mut current: Option<CanonicalTerm> = None;
+        
+        for term in terms {
+            match &mut current {
+                Some(prev) if prev.factors == term.factors => {
+                    prev.coef = prev.coef + term.coef;
+                }
+                _ => {
+                    if let Some(prev) = current.take() {
+                        if prev.coef != Ratio::new(0, 1) {
+                            result.push(prev);
+                        }
+                    }
+                    current = Some(term);
+                }
+            }
+        }
+        
+        if let Some(prev) = current {
+            if prev.coef != Ratio::new(0, 1) {
+                result.push(prev);
+            }
+        }
+        
+        result
+    }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 enum Type {
     Positive,
     Negative,
@@ -201,3 +318,312 @@ impl_op!(Add; add; usize);
 impl_op!(Sub; sub; usize);
 impl_op!(Mul; mul; usize);
 impl_op!(Div; div; usize);
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+struct Factor {
+    base: String,
+    exponent: isize,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+struct CanonicalTerm {
+    coef: Ratio<isize>,
+    factors: Vec<Factor>,  // sorted factors representing the term
+}
+
+impl CanonicalTerm {
+    fn new(coef: isize) -> Self {
+        Self {
+            coef: Ratio::new(coef, 1),
+            factors: Vec::new(),
+        }
+    }
+
+    fn with_var(coef: isize, var: String) -> Self {
+        Self {
+            coef: Ratio::new(coef, 1),
+            factors: vec![Factor { base: var, exponent: 1 }],
+        }
+    }
+
+    fn multiply(&self, other: &Self) -> Self {
+        let mut result = Self::new(1);
+        result.coef = self.coef * other.coef;
+        
+        // Combine factors
+        let mut factors = self.factors.clone();
+        factors.extend(other.factors.iter().cloned());
+        
+        // Sort and combine like factors
+        factors.sort_by(|a, b| a.base.cmp(&b.base));
+        let mut combined = Vec::new();
+        let mut current: Option<Factor> = None;
+        
+        for factor in factors {
+            match &mut current {
+                Some(prev) if prev.base == factor.base => {
+                    prev.exponent += factor.exponent;
+                }
+                _ => {
+                    if let Some(prev) = current.take() {
+                        if prev.exponent != 0 {
+                            combined.push(prev);
+                        }
+                    }
+                    current = Some(factor);
+                }
+            }
+        }
+        
+        if let Some(prev) = current {
+            if prev.exponent != 0 {
+                combined.push(prev);
+            }
+        }
+        
+        result.factors = combined;
+        result
+    }
+
+    fn divide(&self, other: &Self) -> Self {
+        let mut result = Self::new(1);
+        result.coef = self.coef / other.coef;
+        
+        // Combine factors with negative exponents for division
+        let mut factors = self.factors.clone();
+        factors.extend(other.factors.iter().map(|f| Factor {
+            base: f.base.clone(),
+            exponent: -f.exponent,
+        }));
+        
+        // Sort and combine like factors
+        factors.sort_by(|a, b| a.base.cmp(&b.base));
+        let mut combined = Vec::new();
+        let mut current: Option<Factor> = None;
+        
+        for factor in factors {
+            match &mut current {
+                Some(prev) if prev.base == factor.base => {
+                    prev.exponent += factor.exponent;
+                }
+                _ => {
+                    if let Some(prev) = current.take() {
+                        if prev.exponent != 0 {
+                            combined.push(prev);
+                        }
+                    }
+                    current = Some(factor);
+                }
+            }
+        }
+        
+        if let Some(prev) = current {
+            if prev.exponent != 0 {
+                combined.push(prev);
+            }
+        }
+        
+        result.factors = combined;
+        result
+    }
+
+    fn simplify(&mut self) {
+        self.coef = self.coef.reduced();
+    }
+}
+
+impl PartialOrd for Factor {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.base.cmp(&other.base))
+    }
+}
+
+impl Ord for Factor {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.base.cmp(&other.base)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_dim_example() {
+        let a = Dim::var("a");
+        let b = Dim::var("b");
+        let _1 = Dim::from(1);
+        let expr = (a + _1 - 2) * 3 / (b + 1);
+        assert_eq!(expr.substitute(&HashMap::from([("a", 8), ("b", 6)])), 3);
+    }
+
+    #[test]
+    fn test_dim_equivalence() {
+        // Test constant equivalence
+        assert_eq!(Dim::from(1).eq(&Dim::from(1)), Some(true));
+        assert_eq!(Dim::from(1).eq(&Dim::from(2)), Some(false));
+
+        // Test variable equivalence
+        let a = Dim::var("a");
+        let b = Dim::var("b");
+        println!("asserting a != b");
+        assert_eq!(a.eq(&b), Some(false));
+
+        // Test sum equivalence
+        let expr1 = a.clone() + 1;
+        let expr2 = a.clone() + 1;
+        let expr3 = a.clone() + 2;
+        println!("asserting a + 1 == a + 1");
+        assert_eq!(expr1.eq(&expr2), Some(true));
+        println!("asserting a + 1 != a + 2");
+        assert_eq!(expr1.eq(&expr3), Some(false));
+
+        // Test product equivalence
+        let expr4 = a.clone() * 2;
+        let expr5 = a.clone() * 2;
+        let expr6 = a.clone() * 3;
+        println!("asserting a * 2 == a * 2");
+        assert_eq!(expr4.eq(&expr5), Some(true));
+        println!("asserting a * 2 != a * 3");
+        assert_eq!(expr4.eq(&expr6), Some(false));
+
+        // Test complex expression equivalence
+        let complex1 = (a.clone() + 1) * 2;
+        let complex2 = a.clone() * 2 + 2;
+        let complex3 = a.clone() * 2 + 3;
+        println!("asserting (a + 1) * 2 == a * 2 + 2");
+        assert_eq!(complex1.eq(&complex2), Some(true)); // (a + 1) * 2 = a * 2 + 2
+        println!("asserting (a + 1) * 2 != a * 2 + 3");
+        assert_eq!(complex1.eq(&complex3), Some(false));
+
+        // Test commutative operations
+        let expr7 = a.clone() + b.clone();
+        let expr8 = b.clone() + a.clone();
+        println!("asserting a + b == b + a");
+        assert_eq!(expr7.eq(&expr8), Some(true)); // a + b = b + a
+
+        let expr9 = a.clone() * b.clone();
+        let expr10 = b.clone() * a.clone();
+        println!("asserting a * b == b * a");
+        assert_eq!(expr9.eq(&expr10), Some(true)); // a * b = b * a
+
+        // Test distributive property
+        let expr11 = a.clone() * (b.clone() + 1);
+        let expr12 = a.clone() * b.clone() + a.clone();
+        println!("asserting a * (b + 1) == a * b + a");
+        assert_eq!(expr11.eq(&expr12), Some(true)); // a * (b + 1) = a * b + a
+
+        // Test division and complex expressions
+        let c = Dim::var("c");
+
+        // Test division equivalence
+        let expr13 = (a.clone() * b.clone()) / c.clone();
+        let expr14 = a.clone() * (b.clone() / c.clone());
+        println!("asserting (a * b) / c == a * (b / c)");
+        assert_eq!(expr13.eq(&expr14), Some(true)); // (a * b) / c = a * (b / c)
+
+        // Test mixed operations with division
+        let expr15 = (a.clone() + b.clone()) / c.clone();
+        let expr16 = a.clone() / c.clone() + b.clone() / c.clone();
+        println!("asserting (a + b) / c == a/c + b/c");
+        assert_eq!(expr15.eq(&expr16), Some(true)); // (a + b) / c = a/c + b/c
+
+        // Test complex nested expressions
+        let expr17 = (a.clone() * b.clone() + c.clone()) / (a.clone() + Dim::from(1));
+        let expr18 = (b.clone() * a.clone() + c.clone()) / (Dim::from(1) + a.clone());
+        println!("asserting (a*b + c)/(a + 1) == (b*a + c)/(1 + a)");
+        assert_eq!(expr17.eq(&expr18), Some(true)); // (a*b + c)/(a + 1) = (b*a + c)/(1 + a)
+
+        // Test expressions with multiple divisions
+        let expr19 = (a.clone() / b.clone()) / c.clone();
+        let expr20 = a.clone() / (b.clone() * c.clone());
+        println!("asserting (a/b)/c == a/(b*c)");
+        assert_eq!(expr19.eq(&expr20), Some(true)); // (a/b)/c = a/(b*c)
+
+        // Test expressions with constants and variables
+        let expr21 = (a.clone() * Dim::from(2) + b.clone() * Dim::from(3)) / Dim::from(6);
+        let expr22 = a.clone() / Dim::from(3) + b.clone() / Dim::from(2);
+        println!("asserting (2a + 3b)/6 == a/3 + b/2");
+        assert_eq!(expr21.eq(&expr22), Some(true)); // (2a + 3b)/6 = a/3 + b/2
+
+        // Test expressions with nested divisions and multiplications
+        let expr23 = a.clone() * (b.clone() / (c.clone() * Dim::from(2)));
+        let expr24 = (a.clone() * b.clone()) / (Dim::from(2) * c.clone());
+        println!("asserting a * (b/(c*2)) == (a*b)/(2*c)");
+        assert_eq!(expr23.eq(&expr24), Some(true)); // a * (b/(c*2)) = (a*b)/(2*c)
+
+        // Test expressions with subtraction and division
+        let expr25 = (a.clone() - b.clone()) / c.clone();
+        let expr26 = a.clone() / c.clone() - b.clone() / c.clone();
+        println!("asserting (a - b)/c == a/c - b/c");
+        assert_eq!(expr25.eq(&expr26), Some(true)); // (a - b)/c = a/c - b/c
+
+        // Test expressions with multiple operations
+        let expr27 = (a.clone() * b.clone() + c.clone() * Dim::from(2)) / (b.clone() + Dim::from(2));
+        let expr28 = (b.clone() * a.clone() + Dim::from(2) * c.clone()) / (Dim::from(2) + b.clone());
+        println!("asserting (a*b + 2c)/(b + 2) == (b*a + 2c)/(2 + b)");
+        assert_eq!(expr27.eq(&expr28), Some(true)); // (a*b + 2c)/(b + 2) = (b*a + 2c)/(2 + b)
+    }
+
+    #[test]
+    fn test_power_expressions() {
+        let a = Dim::var("a");
+        let b = Dim::var("b");
+        let c = Dim::var("c");
+
+        // Test simple power expressions
+        let pow1 = a.clone() * a.clone();
+        let pow2 = a.clone() * a.clone();
+        println!("asserting a * a == a * a");
+        assert_eq!(pow1.eq(&pow2), Some(true));
+
+        // Test power with division
+        let pow3 = (a.clone() * a.clone()) / b.clone();
+        let pow4 = a.clone() * (a.clone() / b.clone());
+        println!("asserting (a * a) / b == a * (a / b)");
+        assert_eq!(pow3.eq(&pow4), Some(true));
+
+        // Test multiple variables with powers
+        let pow5 = (a.clone() * a.clone() * b.clone()) / (c.clone() * c.clone());
+        let pow6 = (a.clone() * b.clone()) * (a.clone() / (c.clone() * c.clone()));
+        println!("asserting (a² * b) / c² == (a * b) * (a / c²)");
+        assert_eq!(pow5.eq(&pow6), Some(true));
+
+        // Test complex power expressions with constants
+        let pow7 = (a.clone() * a.clone() * Dim::from(2) + b.clone() * b.clone() * Dim::from(3)) / Dim::from(6);
+        let pow8 = (a.clone() * a.clone()) / Dim::from(3) + (b.clone() * b.clone()) / Dim::from(2);
+        println!("asserting (2a² + 3b²)/6 == a²/3 + b²/2");
+        assert_eq!(pow7.eq(&pow8), Some(true));
+
+        // Test nested power expressions
+        let pow9 = (a.clone() * a.clone() + b.clone()) / (a.clone() * c.clone());
+        let pow10 = a.clone() / c.clone() + b.clone() / (a.clone() * c.clone());
+        println!("asserting (a² + b)/(a * c) == a/c + b/(a * c)");
+        assert_eq!(pow9.eq(&pow10), Some(true));
+
+        // Test power expressions with multiple operations
+        let pow11 = (a.clone() * a.clone() * b.clone() + c.clone() * c.clone()) / (b.clone() + Dim::from(2));
+        let pow12 = (b.clone() * a.clone() * a.clone() + c.clone() * c.clone()) / (Dim::from(2) + b.clone());
+        println!("asserting (a² * b + c²)/(b + 2) == (b * a² + c²)/(2 + b)");
+        assert_eq!(pow11.eq(&pow12), Some(true));
+
+        // Test power expressions with division and multiplication
+        let pow13 = (a.clone() * a.clone()) / (b.clone() * b.clone()) * c.clone();
+        let pow14 = (a.clone() * a.clone() * c.clone()) / (b.clone() * b.clone());
+        println!("asserting (a²/b²) * c == (a² * c)/b²");
+        assert_eq!(pow13.eq(&pow14), Some(true));
+    }
+
+    #[test]
+    fn test_complex_expressions() {
+        let a = Dim::var("a");
+        let b = Dim::var("b");
+        let c = Dim::var("c");
+        
+        // Test complex denominator expressions
+        let complex1 = (a.clone() * a.clone() * b.clone()) / ((c.clone() + Dim::from(1)) * (c.clone() + Dim::from(2)));
+        let complex2 = (a.clone() * a.clone() * b.clone()) / (c.clone() * c.clone() + c.clone() * 3 + Dim::from(2));
+        println!("asserting (a² * b)/((c+1)(c+2)) == (a² * b)/(c² + 3c + 2)");
+        assert_eq!(complex1.eq(&complex2), None);
+    }
+}
