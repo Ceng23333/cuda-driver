@@ -25,10 +25,8 @@ impl Ptx {
             .map(|s| s.as_ptr().cast::<c_char>())
             .collect::<Vec<_>>();
         let iluvatar_options = vec![
-                CString::new("-I").unwrap(),
-                CString::new("/usr/local/corex-4.1.3/lib64/clang/16/include").unwrap(),
-                CString::new("-I").unwrap(),
-                CString::new("/usr/local/corex-4.1.3/lib64/python3/dist-packages/tensorflow/include/third_party/gpus/cuda/include").unwrap(),
+                CString::new("-I/usr/local/corex-4.1.3/lib64/clang/16/include").unwrap(),
+                CString::new("-I/usr/local/corex-4.1.3/lib64/python3/dist-packages/tensorflow/include/third_party/gpus/cuda/include").unwrap(),
                 CString::new("-Xclang").unwrap(),
                 CString::new("-fno-cuda-host-device-constexpr").unwrap(),
                 CString::new("--no-cuda-version-check").unwrap(),
@@ -115,7 +113,7 @@ fn collect_options(code: &str, _cc: Version) -> Vec<CString> {
         .unwrap(),
     ];
     fn include_dir(dir: impl fmt::Display) -> CString {
-        CString::new(format!("-I{dir}\n")).unwrap()
+        CString::new(format!("-I{}", dir)).unwrap()
     }
     #[cfg(nvidia)]
     {
