@@ -93,7 +93,6 @@ impl CurrentCtx {
     }
 }
 
-#[cfg(nvidia)]
 impl<'ctx> Stream<'ctx> {
     pub fn malloc<T: Copy>(&self, len: usize) -> DevMem<'ctx> {
         let len = Layout::array::<T>(len).unwrap().size();

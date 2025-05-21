@@ -78,7 +78,26 @@ fn test_behavior() {
             null(),
             null(),
         ));
-        nvrtc!(nvrtcCompileProgram(program, 0, null()));
+        println!("nvrtcCreateProgram passed");
+        
+        // Create compiler options
+        let options = vec![
+            CString::new("-I").unwrap(),
+            CString::new("/usr/local/corex-4.1.3/lib64/clang/16/include").unwrap(),
+            CString::new("-I").unwrap(),
+            CString::new("/usr/local/corex-4.1.3/lib64/python3/dist-packages/tensorflow/include/third_party/gpus/cuda/include").unwrap(),
+            CString::new("-Xclang").unwrap(),
+            CString::new("-fno-cuda-host-device-constexpr").unwrap(),
+            CString::new("--no-cuda-version-check").unwrap(),
+        ];
+        
+        if options.len() > 0 {
+            let opt_ptrs: Vec<*const u8> = options.iter().map(|opt: &CString| opt.as_ptr()).collect();
+            nvrtc!(nvrtcCompileProgram(program, opt_ptrs.len() as i32, opt_ptrs.as_ptr()));
+        } else {
+            nvrtc!(nvrtcCompileProgram(program, 0, null()));
+        }
+        println!("nvrtcCompileProgram passed");
 
         let mut ptx_len = 0;
         nvrtc!(nvrtcGetPTXSize(program, &mut ptx_len));

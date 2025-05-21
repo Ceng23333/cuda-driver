@@ -1,4 +1,4 @@
-﻿#![cfg_attr(iluvatar, allow(unreachable_code, unused))]
+#![cfg_attr(iluvatar, allow(unreachable_code, unused))]
 
 use super::{Cublas, GemmScheme};
 use cuda::{DevByte, Device, Graph, GraphNode, Stream, driver};

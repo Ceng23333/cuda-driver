@@ -1,4 +1,4 @@
-﻿use crate::bindings::cudaDataType;
+use crate::bindings::cudaDataType;
 use half::{bf16, f16};
 use std::{ffi::c_void, marker::PhantomData};
 

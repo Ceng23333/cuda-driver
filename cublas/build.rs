@@ -53,7 +53,11 @@ fn main() {
         // Tell cargo to invalidate the built crate whenever any of the included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()));
     if let Vendor::Iluvatar = vendor {
-        builder = builder.clang_args(["-x", "c++"])
+        builder = builder
+            .clang_args(["-x", "c++"])
+            .clang_arg("-I/usr/local/corex/include")
+            .clang_arg("-I/usr/local/corex/lib64/clang/16/include")
+            .clang_arg("-I/usr/local/corex/include/cuda/std/detail/libcxx/include")
     }
     let bindings = builder
         // Finish the builder and generate the bindings.

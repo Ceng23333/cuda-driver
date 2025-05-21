@@ -22,6 +22,10 @@
 
     println!("cargo:rustc-link-lib=dylib=nvrtc");
 
+    // Add library search paths
+    println!("cargo:rustc-link-search=native=/usr/local/corex/lib64");
+    println!("cargo:rustc-link-search=native=/usr/local/corex/lib");
+
     // Tell cargo to invalidate the built crate whenever the wrapper changes.
     println!("cargo:rerun-if-changed=wrapper.h");
     let include = toolkit.join("include");
@@ -32,6 +36,9 @@
         // The input header we would like to generate bindings for.
         .header("wrapper.h")
         .clang_arg(format!("-I{}", include.display()))
+        .clang_arg("-I/usr/local/corex/include")
+        .clang_arg("-I/usr/local/corex/lib64/clang/16/include")
+        .clang_arg("-I/usr/local/corex/include/cuda/std/detail/libcxx/include")
         // Only generate bindings for the functions in these namespaces.
         .allowlist_function("cu.*")
         .allowlist_function("nvrtc.*")

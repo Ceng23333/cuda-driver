@@ -33,6 +33,9 @@
         // The input header we would like to generate bindings for.
         .header("wrapper.h")
         .clang_args(&includes)
+        .clang_arg("-I/usr/local/corex/include")
+        .clang_arg("-I/usr/local/corex/lib64/clang/16/include")
+        .clang_arg("-I/usr/local/corex/include/cuda/std/detail/libcxx/include")
         // Only generate bindings for the functions in these namespaces.
         .allowlist_function("nccl.*")
         .allowlist_item("nccl.*")
