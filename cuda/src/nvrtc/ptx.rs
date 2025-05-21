@@ -33,7 +33,7 @@ impl Ptx {
                 CString::new("-fno-cuda-host-device-constexpr").unwrap(),
                 CString::new("--no-cuda-version-check").unwrap(),
             ];
-        options.extend(iluvatar_options);
+        options.extend(iluvatar_options.iter().map(|s| s.as_ptr().cast::<c_char>()));
 
         let code = {
             let mut headers = String::new();
